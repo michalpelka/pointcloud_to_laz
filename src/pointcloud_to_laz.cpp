@@ -3,25 +3,26 @@
 #include "sensor_msgs/point_cloud2_iterator.hpp"
 #include <fstream>
 #include <rclcpp/rclcpp.hpp>
+#include <boost/program_options.hpp>
 
 #include "save_laz.h"
 
 class PointCloudSubscriberNode : public rclcpp::Node
 {
 public:
-    PointCloudSubscriberNode() : Node("point_cloud_subscriber_node")
+    PointCloudSubscriberNode(const std::string& pointcloud_topic, const std::string& imu_topic, float aggregation_time ) : Node("point_cloud_subscriber_node")
     {
         // Create a subscriber to receive PointCloud2 messages
         pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "pc", rclcpp::QoS(rclcpp::KeepLast(1000)).best_effort(),
+                pointcloud_topic, rclcpp::QoS(rclcpp::KeepLast(1000)).best_effort(),
             std::bind(&PointCloudSubscriberNode::pointCloudCallback, this, std::placeholders::_1));
 
         imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-            "imu", rclcpp::QoS(rclcpp::KeepLast(1000)).best_effort(),
+                imu_topic, rclcpp::QoS(rclcpp::KeepLast(1000)).best_effort(),
             std::bind(&PointCloudSubscriberNode::imuCallback, this, std::placeholders::_1));
 
         timer_ = this->create_wall_timer(
-            std::chrono::duration<int, std::milli>(5000), // 1000 ms = 1 second interval
+            std::chrono::duration<int, std::milli>(static_cast<int>(aggregation_time*1000)), // 1000 ms = 1 second interval
             std::bind(&PointCloudSubscriberNode::timerCallback, this));
 
     }
@@ -47,9 +48,9 @@ private:
                   << imu.angular_velocity.x << " "
                   << imu.angular_velocity.y << " "
                   << imu.angular_velocity.z << " "
-                  << -imu.linear_acceleration.x << " "
-                  << -imu.linear_acceleration.y << " "
-                  << -imu.linear_acceleration.z << std::endl;
+                  << imu.linear_acceleration.x << " "
+                  << imu.linear_acceleration.y << " "
+                  << imu.linear_acceleration.z << std::endl;
             }
             imu_buffer_.clear();
             buffer_.clear();
@@ -93,8 +94,50 @@ private:
 
 int main(int argc, char** argv)
 {
+    namespace po = boost::program_options;
+
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<PointCloudSubscriberNode>();
+
+    std::string pointcloud_topic;
+    std::string imu_topic;
+    float aggregation_time = 5.0;
+
+    po::options_description desc("Allowed options");
+    desc.add_options()
+            ("pointcloud_topic,p", po::value<std::string>(), "Pointcloud topic")
+            ("imu_topic,i", po::value<std::string>(), "IMU topic")
+            ("aggregation_time,a", po::value<float>(), "Aggregation time in seconds")
+            ;
+
+    po::variables_map vm;
+
+    try {
+        po::store(po::parse_command_line(argc, argv, desc), vm);
+        po::notify(vm);
+
+        if (vm.count("pointcloud_topic")) {
+            pointcloud_topic = vm["pointcloud_topic"].as<std::string>();
+        }
+
+        if (vm.count("imu_topic")) {
+            imu_topic = vm["imu_topic"].as<std::string>();
+        }
+
+        if (vm.count("aggregation_time")) {
+            aggregation_time = vm["aggregation_time"].as<float>();
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+
+    std::cout << "Pointcloud topic: " << pointcloud_topic << std::endl;
+    std::cout << "IMU topic: " << imu_topic << std::endl;
+    std::cout << "Aggregation time: " << aggregation_time << " seconds" << std::endl;
+
+
+
+    auto node = std::make_shared<PointCloudSubscriberNode>(pointcloud_topic, imu_topic, aggregation_time);
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;

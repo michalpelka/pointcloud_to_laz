@@ -17,6 +17,7 @@ find_package(sensor_msgs REQUIRED)
 
 find_package(std_srvs REQUIRED)
 find_package(yaml_cpp_vendor REQUIRED)
+find_package(Boost COMPONENTS program_options REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -28,7 +29,7 @@ target_include_directories(pointcloud_to_laz PUBLIC
 target_compile_features(pointcloud_to_laz PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
 ament_target_dependencies(pointcloud_to_laz rclcpp sensor_msgs)
-target_link_libraries(pointcloud_to_laz laszip)
+target_link_libraries(pointcloud_to_laz laszip Boost::program_options)
 install(TARGETS pointcloud_to_laz
         DESTINATION lib/${PROJECT_NAME})
 
